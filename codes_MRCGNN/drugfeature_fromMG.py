@@ -18,8 +18,15 @@ def set_random_seed(seed, deterministic=False):
     torch.backends.cudnn.deterministic = True
 set_random_seed(1, deterministic=False)
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-for k in range(5):
+for k in range(1):
 
 
-    os.chdir('/mnt/xzk/Dengdataset/trimnet/')
-    os.system('python train.py --zhongzi '+str(k))
+    os.chdir('/Users/jianyuhou/Desktop/MRCGNN-main/codes_MRCGNN/trimnet/')
+    cmd = (
+        "python3.11 train.py "
+        "--zhongzi " + str(k) + " "
+        "--n_epochs 1 " 
+        "--lr 0.001 " 
+        "--batch_size 128 " 
+    )
+    os.system(cmd)
