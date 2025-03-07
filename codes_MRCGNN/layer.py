@@ -62,8 +62,7 @@ class MRCGNN(nn.Module):
         # For a pair of entities, the dimension becomes 2*(hidden1+hidden2).
         self.classifier = nn.Linear(2 * (hidden1 + hidden2), 65)
 
-        # Remove the skip connection: no pretrained features are loaded now.
-        # (Thus, we no longer load features from 'drug_emb_trimnet' or 'drug_idsxiao.npy'.)
+        # We no longer load any pretrained features for skip connection.
 
     def forward(self, data_o, data_s, data_a, idx):
         # Process data_o branch
@@ -77,13 +76,12 @@ class MRCGNN(nn.Module):
         x1_o = F.dropout(x1_o, self.dropout, training=self.training)
         x2_o = self.encoder_o2(x1_o, adj, e_type)
 
-        # Contrastive learning branch: using data_s
+        # Contrastive learning branches (unused in prediction)
         x_a = data_s.x
         x1_o_a = F.relu(self.encoder_o1(x_a, adj, e_type))
         x1_o_a = F.dropout(x1_o_a, self.dropout, training=self.training)
         x2_o_a = self.encoder_o2(x1_o_a, adj, e_type)
 
-        # Contrastive learning branch: using data_a (with a different edge type)
         x1_o_a_a = F.relu(self.encoder_o1(x_o, adj, e_type1))
         x1_o_a_a = F.dropout(x1_o_a_a, self.dropout, training=self.training)
         x2_o_a_a = self.encoder_o2(x1_o_a_a, adj, e_type1)
@@ -95,19 +93,37 @@ class MRCGNN(nn.Module):
         ret_os_a = self.disc(h_os, x2_o, x2_o_a_a)
 
         # For final prediction, use only data_o branch:
-        # Combine features from first and second layers using attention
         final = torch.cat((self.attt[0] * x1_o, self.attt[1] * x2_o), dim=1)
 
-        # Extract representations for entity pairs using indices
         a = [int(i) for i in list(idx[0])]
         b = [int(i) for i in list(idx[1])]
         aa = torch.tensor(a, dtype=torch.long)
         bb = torch.tensor(b, dtype=torch.long)
         entity1 = final[aa]
         entity2 = final[bb]
-
-        # Concatenate entity representations (without any skip connection)
         concatenate = torch.cat((entity1, entity2), dim=1)
         log = self.classifier(concatenate)
 
         return log, ret_os, ret_os_a, x2_o
+
+    def predict(self, data_o, idx):
+        """
+        New prediction method that uses only data_o and idx.
+        """
+        x_o, adj, e_type = data_o.x, data_o.edge_index, data_o.edge_type
+        e_type = torch.tensor(e_type, dtype=torch.int64)
+        # Process the main branch
+        x1_o = F.relu(self.encoder_o1(x_o, adj, e_type))
+        x1_o = F.dropout(x1_o, self.dropout, training=self.training)
+        x2_o = self.encoder_o2(x1_o, adj, e_type)
+        final = torch.cat((self.attt[0] * x1_o, self.attt[1] * x2_o), dim=1)
+        
+        a = [int(i) for i in list(idx[0])]
+        b = [int(i) for i in list(idx[1])]
+        aa = torch.tensor(a, dtype=torch.long)
+        bb = torch.tensor(b, dtype=torch.long)
+        entity1 = final[aa]
+        entity2 = final[bb]
+        concatenate = torch.cat((entity1, entity2), dim=1)
+        log = self.classifier(concatenate)
+        return log

@@ -102,7 +102,7 @@ def train_model(model, optimizer, data_o, data_s, data_a, train_loader, val_load
 
 #
         if not args.fastmode:
-            acc_val, f1_val, recall_val,precision_val, loss_val = test(model, val_loader, data_o, data_s, data_a, args,0)
+            acc_val, f1_val, recall_val,precision_val, loss_val = test(model, val_loader, data_o, args,0)
             #if acc_val >= max_auc and f1_val>=max_f1
             if acc_val >= max_auc and f1_val>=max_f1:
                 model_max = copy.deepcopy(model)
@@ -132,26 +132,23 @@ def train_model(model, optimizer, data_o, data_s, data_a, train_loader, val_load
     print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
 
     # Save data_o to a pickle file
-    with open('data_o_new.pkl', 'wb') as f: 
+    with open('data_o_new2.pkl', 'wb') as f: 
         pickle.dump(data_o, f)
 
-    torch.save(data_o, 'data_o_new.pt')
+    torch.save(data_o, 'data_o_new2.pt')
 
     # Testing
-    acc_test, f1_test, recall_test,precision_test, loss_test= test(model_max, test_loader, data_o, data_s, data_a, args,1)
+    acc_test, f1_test, recall_test,precision_test, loss_test= test(model_max, test_loader, data_o, args,1)
     print('loss_test: {:.4f}'.format(loss_test.item()), 'acc_test: {:.4f}'.format(acc_test),
           'f1_test: {:.4f}'.format(f1_test), 'precision_test: {:.4f}'.format(precision_test),'recall_test: {:.4f}'.format(recall_test))
 
 
-def test(model, loader, data_o, data_s, data_a, args,printfou):
-
+def test(model, loader, data_o, args, printfou):
     m = torch.nn.Sigmoid()
     loss_fct = torch.nn.CrossEntropyLoss()
-    b_xent = nn.BCEWithLogitsLoss()
     model.eval()
     y_pred = []
     y_label = []
-    lbl = data_a.y
     zhongzi=args.zhongzi
     with torch.no_grad():
         for i, (inp) in enumerate(loader):
@@ -161,19 +158,18 @@ def test(model, loader, data_o, data_s, data_a, args,printfou):
             if args.cuda:
                 label = label.cuda()
 
-            output, cla_os, cla_os_a, _ = model(data_o, data_s, data_a, inp)
+            # Use the predict method with only data_o and input indices
+            output = model.predict(data_o, inp)
             log = torch.squeeze(m(output))
 
-            loss1 = loss_fct(log, label.long())
-            loss2 = b_xent(cla_os, lbl.float())
-            loss3 = b_xent(cla_os_a, lbl.float())
-            loss = args.loss_ratio1 * loss1 + args.loss_ratio2 * loss2 + args.loss_ratio3 * loss3
+            loss = loss_fct(log, label.long())
 
             label_ids = label.to('cpu').numpy()
             y_label = y_label + label_ids.flatten().tolist()
             y_pred = y_pred + output.flatten().tolist()
 
-    y_pred_train1=[]
+    # Post-process predictions to compute metrics...
+    y_pred_train1 = []
     y_label_train = np.array(y_label)
     y_pred_train = np.array(y_pred).reshape((-1, 65))
     for i in range(y_pred_train.shape[0]):
@@ -182,6 +178,7 @@ def test(model, loader, data_o, data_s, data_a, args,printfou):
             if y_pred_train[i][j] == a:
                 y_pred_train1.append(j)
                 break
+
     acc = accuracy_score(y_label_train, y_pred_train1)
     f1_score1 = f1_score(y_label_train, y_pred_train1, average='macro')
     recall1 = recall_score(y_label_train, y_pred_train1, average='macro')
@@ -211,14 +208,8 @@ def test(model, loader, data_o, data_s, data_a, args,printfou):
     precision, recall, _thresholds = precision_recall_curve(y_label_train1.reshape((-1)), y_pred_train.reshape((-1)))
     aupr = auc(recall, precision)
 
-    if printfou==1:
+    if printfou == 1:
         with open(args.out_file, 'a') as f:
-
-
             f.write(str(zhongzi)+'  '+str(acc)+'   '+str(f1_score1)+'   '+str(recall1)+'   '+str(precision1)+'   '+str(auc1)+'   '+str(aupr)+'   '+str(auc_macro)+'   '+str(aupr_macro)+'\n')
-
-
-
-
-
-    return acc,f1_score1,recall1,precision1,loss
+    
+    return acc, f1_score1, recall1, precision1, loss
