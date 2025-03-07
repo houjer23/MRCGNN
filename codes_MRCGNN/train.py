@@ -8,6 +8,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score, f1_score,acc
 import os
 import random
 import copy
+import pickle
 
 
 import numpy as np
@@ -129,6 +130,12 @@ def train_model(model, optimizer, data_o, data_s, data_a, train_loader, val_load
 
     print("Optimization Finished!")
     print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
+
+    # Save data_o to a pickle file
+    with open('data_o.pkl', 'wb') as f: 
+        pickle.dump(data_o, f)
+
+    torch.save(data_o, 'data_o.pt')
 
     # Testing
     acc_test, f1_test, recall_test,precision_test, loss_test= test(model_max, test_loader, data_o, data_s, data_a, args,1)

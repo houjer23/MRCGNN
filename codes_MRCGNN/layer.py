@@ -81,111 +81,84 @@ class MLP(nn.Module):
 
 
 class MRCGNN(nn.Module):
-    def __init__(self, feature, hidden1, hidden2, decoder1, dropout,zhongzi):
+    def __init__(self, feature, hidden1, hidden2, decoder1, dropout, zhongzi):
         super(MRCGNN, self).__init__()
 
+        self.encoder_o1 = RGCNConv(feature, hidden1, num_relations=65)
+        self.encoder_o2 = RGCNConv(hidden1, hidden2, num_relations=65)
 
-        self.encoder_o1 = RGCNConv(feature, hidden1,num_relations=65)
-        self.encoder_o2 = RGCNConv(hidden1 , hidden2,num_relations=65)
-
-        self.attt = torch.zeros(2)
-        self.attt[0] = 0.5
-        self.attt[1] = 0.5
-        self.attt = nn.Parameter(self.attt)
+        # Use a two-element parameter for layer attention
+        self.attt = nn.Parameter(torch.tensor([0.5, 0.5]))
         self.disc = Discriminator(hidden2 * 2)
-
         self.dropout = dropout
         self.sigm = nn.Sigmoid()
         self.read = AvgReadout()
-        self.mlp = nn.ModuleList([nn.Linear(448, 256),
-                                  nn.ELU(),
-                                  nn.Dropout(p=0.1),
-                                  nn.Linear(256, 128),
-                                  nn.ELU(),
-                                  nn.Dropout(p=0.1),
-                                  nn.Linear(128, 65)
-                                  ])
+        
+        # Replace the MLP with a single classifier layer.
+        # Here, final feature dimension is assumed to be 448.
+        self.classifier = nn.Linear(448, 65)
 
+        # The rest of your initialization (loading drug_list and features) remains unchanged.
         drug_list = []
         with open('data/drug_listxiao.csv', 'r') as f:
             reader = csv.reader(f)
             for row in reader:
                 drug_list.append(row[0])
         features = np.load('trimnet/drug_emb_trimnet' + str(zhongzi) + '.npy')
-
-        ids = np.load('trimnet/drug_idsxiao.npy')
-        ids = ids.tolist()
-        features1 = []
-        for i in range(len(drug_list)):
-            features1.append(features[ids.index(drug_list[i])])
+        ids = np.load('trimnet/drug_idsxiao.npy').tolist()
+        features1 = [features[ids.index(drug_list[i])] for i in range(len(drug_list))]
         features1 = np.array(features1)
+        self.features1 = torch.from_numpy(features1).cuda()
 
-        self.features1 = torch.from_numpy(features1).cuda()  #
-
-    def MLP(self, vectors, layer):
-            for i in range(layer):
-                vectors = self.mlp[i](vectors)
-
-            return vectors
     def forward(self, data_o, data_s, data_a, idx):
-
-
-        #RGCN for DDI event graph and two corrupted graph
-        x_o, adj ,e_type= data_o.x, data_o.edge_index,data_o.edge_type
+        # Process through RGCN layers (same as before)
+        x_o, adj, e_type = data_o.x, data_o.edge_index, data_o.edge_type
         e_type1 = data_a.edge_type
-        e_type=torch.tensor(e_type,dtype=torch.int64)
+        e_type = torch.tensor(e_type, dtype=torch.int64)
         e_type1 = torch.tensor(e_type1, dtype=torch.int64)
-        adj2 = data_s.edge_index
         x_a = data_s.x
 
-        x1_o = F.relu(self.encoder_o1(x_o, adj,e_type))
+        x1_o = F.relu(self.encoder_o1(x_o, adj, e_type))
         x1_o = F.dropout(x1_o, self.dropout, training=self.training)
-        x1_os = x1_o
-        x2_o = self.encoder_o2(x1_os, adj,e_type)
-        x2_os = x2_o
+        x2_o = self.encoder_o2(x1_o, adj, e_type)
 
-
-        x1_o_a = F.relu(self.encoder_o1(x_a, adj,e_type))
+        # (Other branches remain unchanged; note that your contrastive learning paths still exist.)
+        x1_o_a = F.relu(self.encoder_o1(x_a, adj, e_type))
         x1_o_a = F.dropout(x1_o_a, self.dropout, training=self.training)
-        x1_os_a = x1_o_a
-        x2_o_a = self.encoder_o2(x1_os_a, adj,e_type)
-        x2_os_a = x2_o_a
+        x2_o_a = self.encoder_o2(x1_o_a, adj, e_type)
 
         x1_o_a_a = F.relu(self.encoder_o1(x_o, adj, e_type1))
         x1_o_a_a = F.dropout(x1_o_a_a, self.dropout, training=self.training)
-        x1_os_a_a= x1_o_a_a
-        x2_o_a_a = self.encoder_o2(x1_os_a_a, adj, e_type1)
-        x2_os_a_a = x2_o_a_a
+        x2_o_a_a = self.encoder_o2(x1_o_a_a, adj, e_type1)
 
-        # readout
-        h_os = self.read(x2_os)
+        # Readout
+        h_os = self.read(x2_o)
         h_os = self.sigm(h_os)
 
+        # Contrastive learning using the discriminator
+        ret_os = self.disc(h_os, x2_o, x2_o_a)
+        ret_os_a = self.disc(h_os, x2_o, x2_o_a_a)
 
-
-        # contrastive learning#
-        ret_os = self.disc(h_os, x2_os, x2_os_a)
-        ret_os_a =self.disc(h_os, x2_os, x2_os_a_a) #self.disc(h_os, x2_os, x2_os_a_a)
-
+        # Indices for entity pairs
         a = [int(i) for i in list(idx[0])]
         b = [int(i) for i in list(idx[1])]
-
         aa = torch.tensor(a, dtype=torch.long)
         bb = torch.tensor(b, dtype=torch.long)
-        #layer attnetion
+
+        # Layer attention: combine features from first and second layers
         final = torch.cat((self.attt[0] * x1_o, self.attt[1] * x2_o), dim=1)
 
         entity1 = final[aa]
         entity2 = final[bb]
 
-        #skip connection
+        # Skip connection using preloaded features
         entity1_res = self.features1[aa].to('cuda')
         entity2_res = self.features1[bb].to('cuda')
         entity1 = torch.cat((entity1, entity1_res), dim=1)
         entity2 = torch.cat((entity2, entity2_res), dim=1)
-
+        
+        # Concatenate the two entity representations and predict directly
         concatenate = torch.cat((entity1, entity2), dim=1)
-        feature = self.MLP(concatenate, 7)
-        log = feature
+        log = self.classifier(concatenate)
 
-        return log, ret_os, ret_os_a, x2_os
+        return log, ret_os, ret_os_a, x2_o

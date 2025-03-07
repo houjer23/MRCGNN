@@ -20,7 +20,9 @@ def set_random_seed(seed, deterministic=False):
     torch.backends.cudnn.deterministic = True
 set_random_seed(1, deterministic=False)
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-for k in range(5):
+
+os.chdir('/fs/student/jianyu_hou/cs292F/MRCGNN/codes_MRCGNN/')
+for k in range(1): # modified, used to be 5
 
     os.system('python main.py --out_file test.txt --zhongzi '+str(k))
 

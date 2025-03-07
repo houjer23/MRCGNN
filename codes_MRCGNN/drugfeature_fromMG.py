@@ -18,14 +18,12 @@ def set_random_seed(seed, deterministic=False):
     torch.backends.cudnn.deterministic = True
 set_random_seed(1, deterministic=False)
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-for k in range(1):
-
-
-    os.chdir('/Users/jianyuhou/Desktop/MRCGNN-main/codes_MRCGNN/trimnet/')
+for k in range(1): # modified, used to be 5
+    os.chdir('/fs/student/jianyu_hou/cs292F/MRCGNN/codes_MRCGNN/trimnet/')
     cmd = (
-        "python3.11 train.py "
+        "python train.py "
         "--zhongzi " + str(k) + " "
-        "--n_epochs 1 " 
+        "--n_epochs 100 " 
         "--lr 0.001 " 
         "--batch_size 128 " 
     )
