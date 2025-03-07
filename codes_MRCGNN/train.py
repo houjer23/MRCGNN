@@ -132,10 +132,10 @@ def train_model(model, optimizer, data_o, data_s, data_a, train_loader, val_load
     print("Total time elapsed: {:.4f}s".format(time.time() - t_total))
 
     # Save data_o to a pickle file
-    with open('data_o.pkl', 'wb') as f: 
+    with open('data_o_new.pkl', 'wb') as f: 
         pickle.dump(data_o, f)
 
-    torch.save(data_o, 'data_o.pt')
+    torch.save(data_o, 'data_o_new.pt')
 
     # Testing
     acc_test, f1_test, recall_test,precision_test, loss_test= test(model_max, test_loader, data_o, data_s, data_a, args,1)

@@ -47,7 +47,7 @@ def settings():
     parser.add_argument('--batch', type=int, default=256,
                         help='Batch size. Default is 256.')
 #
-    parser.add_argument('--epochs', type=int, default=60,
+    parser.add_argument('--epochs', type=int, default=50,
                         help='Number of epochs to train. Default is 100.')
 
     parser.add_argument('--network_ratio', type=float, default=1,
