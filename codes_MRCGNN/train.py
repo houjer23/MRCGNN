@@ -135,6 +135,9 @@ def train_model(model, optimizer, data_o, data_s, data_a, train_loader, val_load
     with open('data_o_new2.pkl', 'wb') as f: 
         pickle.dump(data_o, f)
 
+    torch.save(model_max.state_dict(), "model_mrcgnn.pt")
+    print("Model saved as model_mrcgnn.pt")
+
     torch.save(data_o, 'data_o_new2.pt')
 
     # Testing
